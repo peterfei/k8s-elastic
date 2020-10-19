@@ -47,9 +47,27 @@ metadata:
 spec:
   type: NodePort
   ports:
+    - port: 9300
+      targetPort: 9300
+      nodePort: 30999
+  selector:
+    app: elasticsearch
+    role: master
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: ns-elastic
+  name: elasticsearch-service2
+  labels:
+    app: elasticsearch
+    role: master
+spec:
+  type: NodePort
+  ports:
     - port: 9200
       targetPort: 9200
-      nodePort: 29200
+      nodePort: 30998
   selector:
     app: elasticsearch
     role: master

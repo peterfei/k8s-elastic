@@ -37,7 +37,7 @@ metadata:
     role: master
 spec:
   serviceName: elasticsearch-master
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
       app: elasticsearch
@@ -54,13 +54,13 @@ spec:
            claimName: pv-claim-elastic-master
       containers:
         - name: elasticsearch
-          image: dockerhub-pr.yeshj.com/ops/elasticsearch:7.2.0
+          image: docker.elastic.co/elasticsearch/elasticsearch:7.3.2
           resources:
             requests:
-              memory: 2Gi
+              memory: 1Gi
               cpu: 1.0
             limits:
-              memory: 4Gi
+              memory: 2Gi
               cpu: 2.0
           command: ["bash", "-c", "ulimit -l unlimited && sysctl -w vm.max_map_count=262144 && chown -R elasticsearch:elasticsearch /usr/share/elasticsearch/data && exec su elasticsearch docker-entrypoint.sh"]
           ports:
@@ -72,7 +72,7 @@ spec:
             - name: discovery.seed_hosts
               value: "elasticsearch-master.ns-elastic.svc.cluster.local"
             - name: cluster.initial_master_nodes
-              value: "elasticsearch-master-0,elasticsearch-master-1,elasticsearch-master-2"
+              value: "elasticsearch-master-0,elasticsearch-master-1"
             - name: ES_JAVA_OPTS
               value: -Xms512m -Xmx512m
 
@@ -82,6 +82,12 @@ spec:
               value: "false"
             - name: node.data
               value: "false"
+            
+            - name: http.cors.enabled
+              value: "true"
+            - name: http.cors.allow-origin
+              value: "*"
+
 
             - name: cluster.name
               value: "elasticsearch-cluster-v7"
