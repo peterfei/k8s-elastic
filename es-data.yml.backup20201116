@@ -37,7 +37,7 @@ metadata:
     role: data
 spec:
   serviceName: elasticsearch-data
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: elasticsearch
@@ -117,28 +117,23 @@ spec:
       role: data
 
 ---
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  namespace: ns-elastic
-  name: elasticsearch-master-config
-  labels:
-    app: elasticsearch
-    role: data
-data:
-  elasticsearch.yml: |-
-    cluster.name: "elasticsearch-cluster-v7"
-    node.name: "elasticsearch-data"
-    discovery.seed_hosts: "elasticsearch-master.ns-elastic.svc.cluster.local"
-    cluster.initial_master_nodes: "elasticsearch-master-0,elasticsearch-master-1"
-    network.host: 0.0.0.0
-    path.repo: "/data/kubernetes-storageclass/"
-
-    node:
-      master: false
-      data: true
-      ingest: false
-
-    xpack.security.enabled: true
-    xpack.monitoring.collection.enabled: true
----
+#apiVersion: v1
+#kind: ConfigMap
+#metadata:
+#  namespace: ns-elastic
+#  name: elasticsearch-data
+#  labels:
+#    app: elasticsearch
+#    role: data
+#data:
+#  elasticsearch.yml: |-
+#    cluster.name: "elasticsearch-cluster-v7"
+#    node.name: ${node.name}
+#    cluster.initial_master_nodes: ${cluster.initial_master_nodes}
+#    network.host: 0.0.0.0
+#    node:
+#      master: false
+#      data: true
+#      ingest: false
+#    xpack.security.enabled: true
+#    xpack.monitoring.collection.enabled: true
