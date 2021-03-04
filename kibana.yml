@@ -2,7 +2,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  namespace: ns-elastic
+  namespace: es
   name: kibana-config
   labels:
     app: kibana
@@ -10,6 +10,7 @@ data:
   kibana.yml: |-
     server.host: 0.0.0.0
     i18n.locale: "zh-CN"
+    xpack.monitoring.ui.container.elasticsearch.enabled: true
     elasticsearch:
       hosts: ${ELASTICSEARCH_URL}
       username: ${ELASTICSEARCH_USER}
@@ -21,13 +22,14 @@ metadata:
   labels:
     app: kibana
   name: kibana
-  namespace: ns-elastic
+  namespace: es
 spec:
   replicas: 1
   revisionHistoryLimit: 10
   selector:
     matchLabels:
       app: kibana
+      #app: node01
   template:
     metadata:
       labels:
@@ -41,9 +43,9 @@ spec:
               protocol: TCP
           env:
             - name: ELASTICSEARCH_URL
-              value: "http://elasticsearch-client.ns-elastic.svc.cluster.local:9200"
+              value: "http://elasticsearch.es.svc.cluster.local:9200"
             - name: ELASTICSEARCH_USER
-              value: "kibana"
+              value: "elastic"
             - name: ELASTICSEARCH_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -70,7 +72,7 @@ metadata:
   labels:
     app: kibana
   name: kibana-service
-  namespace: ns-elastic
+  namespace: es
 spec:
   type: NodePort
   ports:

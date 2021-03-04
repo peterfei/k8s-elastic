@@ -1,8 +1,8 @@
 kind: PersistentVolume
 apiVersion: v1
 metadata:
-  name: pv-volume-es-data
-  namespace: es
+  name: pv-volume-elastic-master
+  namespace: ns-elastic
   labels:
     type: local
 spec:
@@ -12,42 +12,13 @@ spec:
   accessModes:
     - ReadWriteOnce
   hostPath:
-    path: "/var/lib/docker/new/data/es/data"
+    path: "/var/lib/docker/data/es/master"
 ---
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
-  name: pv-claim-es-data
-  namespace: es
-spec:
-  storageClassName: manual
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 3Gi
----
-kind: PersistentVolume
-apiVersion: v1
-metadata:
-  name: pv-volume-es-data-bak
-  namespace: es
-  labels:
-    type: local
-spec:
-  storageClassName: manual
-  capacity:
-    storage: 200Gi
-  accessModes:
-    - ReadWriteOnce
-  hostPath:
-    path: "/mnt/k8s-data"
----
-kind: PersistentVolumeClaim
-apiVersion: v1
-metadata:
-  name: pv-claim-es-data-bak
-  namespace: es
+  name: pv-claim-elastic-master
+  namespace: ns-elastic
 spec:
   storageClassName: manual
   accessModes:
@@ -59,23 +30,23 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  namespace: es
-  name: elasticsearch-data
+  namespace: ns-elastic
+  name: elasticsearch-master
   labels:
     app: elasticsearch
-    role: data
+    role: master
 spec:
-  serviceName: elasticsearch-data
-  replicas: 3
+  serviceName: elasticsearch-master
+  replicas: 2
   selector:
     matchLabels:
       app: elasticsearch
-      role: data
+      role: master
   template:
     metadata:
       labels:
         app: elasticsearch
-        role: data
+        role: master
     spec:
       affinity:
         podAntiAffinity:
@@ -87,22 +58,16 @@ spec:
                 - key: role
                   operator: In
                   values:
-                  - data
-              topologyKey: kubernetes.io/hostname
+                  - master
+              topologyKey: kubernetes.io/hostname 
       volumes:
-       - name: pv-storage-es-data
+       - name: pv-storage-elastic-master
          persistentVolumeClaim:
-           claimName: pv-claim-es-data
-       - name: pv-storage-es-data-bak
-         persistentVolumeClaim:
-           claimName: pv-claim-es-data-bak
+           claimName: pv-claim-elastic-master
       containers:
         - name: elasticsearch
           image: registry.cn-zhangjiakou.aliyuncs.com/huazhu_platform/elasticsearch:7.4.2
-          args: [
-            "--path.repo=[\"/mnt/k8s-data\"]"
-          ]
-          #image: registry.cn-zhangjiakou.aliyuncs.com/huazhu_alpha/elasticsearch:7.4.2-1-3
+          #image: docker.elastic.co/elasticsearch/elasticsearch:7.4.2
           resources:
             requests:
               memory: 1Gi
@@ -110,35 +75,33 @@ spec:
             limits:
               memory: 2Gi
               cpu: 2.0
-          command: ["bash", "-c", "ulimit -l unlimited && sysctl -w vm.max_map_count=262144 && chown -R elasticsearch:elasticsearch /usr/share/elasticsearch/data&& mkdir -p /mnt/k8s-data && exec su elasticsearch docker-entrypoint.sh"]
+          command: ["bash", "-c", "ulimit -l unlimited && sysctl -w vm.max_map_count=262144 && chown -R elasticsearch:elasticsearch /usr/share/elasticsearch/data && exec su elasticsearch docker-entrypoint.sh"]
           ports:
             - containerPort: 9200
               name: http
             - containerPort: 9300
               name: transport
           env:
-            - name: discovery.zen.minimum_master_nodes
-              value: "2"
-            - name: cluster.initial_master_nodes
-              value: "elasticsearch-data-0,elasticsearch-data-1,elasticsearch-data-2"
             - name: discovery.seed_hosts
-              value: "elasticsearch-master.es.svc.cluster.local"
+              value: "elasticsearch-master"
+            - name: cluster.initial_master_nodes
+              value: "elasticsearch"
+              #value: "elasticsearch-master-0.ns-elastic.svc.cluster.local"
             - name: ES_JAVA_OPTS
               value: -Xms1024m -Xmx1024m
 
             - name: node.master
-              value: "false"
+              value: "true"
             - name: node.ingest
-              #value: "true"
               value: "false"
             - name: node.data
-              value: "true"
+              value: "false"
+            
             - name: http.cors.enabled
               value: "true"
             - name: http.cors.allow-origin
               value: "*"
-            - name: path.repo
-              value: "/mnt/k8s-data"
+
             - name: cluster.name
               value: "elasticsearch-cluster-v7"
             - name: node.name
@@ -148,9 +111,8 @@ spec:
 
           volumeMounts:
            - mountPath: /usr/share/elasticsearch/data
-             name: pv-storage-es-data
-           - mountPath: /mnt/k8s-data
-             name: pv-storage-es-data-bak
+             name: pv-storage-elastic-master
+
           # Gave permission to init container
           securityContext:
             privileged: true
@@ -162,36 +124,42 @@ spec:
 apiVersion: policy/v1beta1
 kind: PodDisruptionBudget
 metadata:
-  namespace: es
-  name: elasticsearch-data
+  namespace: ns-elastic
+  name: elasticsearch-master
 spec:
   maxUnavailable: 1
   selector:
     matchLabels:
       app: elasticsearch
-      role: data
-
+      role: master
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  namespace: es
-  name: elasticsearch-data-config
+  namespace: ns-elastic
+  name: elasticsearch-master-config
   labels:
     app: elasticsearch
     role: data
 data:
   elasticsearch.yml: |-
     cluster.name: "elasticsearch-cluster-v7"
-    node.name: "elasticsearch-data"
-    discovery.seed_hosts: "elasticsearch-master.es.svc.cluster.local"
-    cluster.initial_master_nodes: "elasticsearch-data-0,elasticsearch-data-1,elasticsearch-data-2"
+    node.name: "elasticsearch-master"
     network.host: 0.0.0.0
-    path.repo: ["/mnt/k8s-data"]
-    #node.max_local_storage_nodes: 3
+    #path.repo: ["/mnt/k8s-data"]
+    #discovery.seed_hosts: "elasticsearch-master.ns-elastic.svc.cluster.local"
+    discovery.seed_hosts: ["elasticsearch-master"]
+    #cluster.initial_master_nodes: "master"
+    cluster.initial_master_nodes: ["elasticsearch"]
+    discovery.zen.ping_timeout: 60s
+    client.transport.ping_timeout: 120s
+    discovery.zen.minimum_master_nodes: 2
+    node.max_local_storage_nodes: 2
     node:
-      master: false
-      data: true
+      master: true
+      data: false
       ingest: false
     xpack.security.enabled: true
     xpack.monitoring.collection.enabled: true
+    http.cors.enabled: true
+    http.cors.allow-origin: "*"

@@ -1,5 +1,4 @@
 network.host: 0.0.0.0
 cluster.name: "docker-cluster"
-xpack.security.enabled: "true"
-xpack.security.transport.ssl.enabled: "true"
+path.repo: ["/data/k8s_es_backup"]
 

@@ -1,8 +1,8 @@
 kind: PersistentVolume
 apiVersion: v1
 metadata:
-  name: pv-volume-es-data
-  namespace: es
+  name: pv-volume-elastic-data
+  namespace: ns-elastic
   labels:
     type: local
 spec:
@@ -12,42 +12,13 @@ spec:
   accessModes:
     - ReadWriteOnce
   hostPath:
-    path: "/var/lib/docker/new/data/es/data"
+    path: "/var/lib/docker/data/es/data"
 ---
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
-  name: pv-claim-es-data
-  namespace: es
-spec:
-  storageClassName: manual
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 3Gi
----
-kind: PersistentVolume
-apiVersion: v1
-metadata:
-  name: pv-volume-es-data-bak
-  namespace: es
-  labels:
-    type: local
-spec:
-  storageClassName: manual
-  capacity:
-    storage: 200Gi
-  accessModes:
-    - ReadWriteOnce
-  hostPath:
-    path: "/mnt/k8s-data"
----
-kind: PersistentVolumeClaim
-apiVersion: v1
-metadata:
-  name: pv-claim-es-data-bak
-  namespace: es
+  name: pv-claim-elastic-data
+  namespace: ns-elastic
 spec:
   storageClassName: manual
   accessModes:
@@ -59,7 +30,7 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  namespace: es
+  namespace: ns-elastic
   name: elasticsearch-data
   labels:
     app: elasticsearch
@@ -90,18 +61,12 @@ spec:
                   - data
               topologyKey: kubernetes.io/hostname
       volumes:
-       - name: pv-storage-es-data
+       - name: pv-storage-elastic-data
          persistentVolumeClaim:
-           claimName: pv-claim-es-data
-       - name: pv-storage-es-data-bak
-         persistentVolumeClaim:
-           claimName: pv-claim-es-data-bak
+           claimName: pv-claim-elastic-data
       containers:
         - name: elasticsearch
           image: registry.cn-zhangjiakou.aliyuncs.com/huazhu_platform/elasticsearch:7.4.2
-          args: [
-            "--path.repo=[\"/mnt/k8s-data\"]"
-          ]
           #image: registry.cn-zhangjiakou.aliyuncs.com/huazhu_alpha/elasticsearch:7.4.2-1-3
           resources:
             requests:
@@ -110,7 +75,7 @@ spec:
             limits:
               memory: 2Gi
               cpu: 2.0
-          command: ["bash", "-c", "ulimit -l unlimited && sysctl -w vm.max_map_count=262144 && chown -R elasticsearch:elasticsearch /usr/share/elasticsearch/data&& mkdir -p /mnt/k8s-data && exec su elasticsearch docker-entrypoint.sh"]
+          command: ["bash", "-c", "ulimit -l unlimited && sysctl -w vm.max_map_count=262144 && chown -R elasticsearch:elasticsearch /usr/share/elasticsearch/data && exec su elasticsearch docker-entrypoint.sh"]
           ports:
             - containerPort: 9200
               name: http
@@ -122,9 +87,9 @@ spec:
             - name: cluster.initial_master_nodes
               value: "elasticsearch-data-0,elasticsearch-data-1,elasticsearch-data-2"
             - name: discovery.seed_hosts
-              value: "elasticsearch-master.es.svc.cluster.local"
+              value: "elasticsearch-master.ns-elastic.svc.cluster.local"
             - name: ES_JAVA_OPTS
-              value: -Xms1024m -Xmx1024m
+              value: -Xms512m -Xmx512m
 
             - name: node.master
               value: "false"
@@ -137,8 +102,7 @@ spec:
               value: "true"
             - name: http.cors.allow-origin
               value: "*"
-            - name: path.repo
-              value: "/mnt/k8s-data"
+
             - name: cluster.name
               value: "elasticsearch-cluster-v7"
             - name: node.name
@@ -148,9 +112,8 @@ spec:
 
           volumeMounts:
            - mountPath: /usr/share/elasticsearch/data
-             name: pv-storage-es-data
-           - mountPath: /mnt/k8s-data
-             name: pv-storage-es-data-bak
+             name: pv-storage-elastic-data
+
           # Gave permission to init container
           securityContext:
             privileged: true
@@ -162,7 +125,7 @@ spec:
 apiVersion: policy/v1beta1
 kind: PodDisruptionBudget
 metadata:
-  namespace: es
+  namespace: ns-elastic
   name: elasticsearch-data
 spec:
   maxUnavailable: 1
@@ -175,7 +138,7 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  namespace: es
+  namespace: ns-elastic
   name: elasticsearch-data-config
   labels:
     app: elasticsearch
@@ -184,14 +147,16 @@ data:
   elasticsearch.yml: |-
     cluster.name: "elasticsearch-cluster-v7"
     node.name: "elasticsearch-data"
-    discovery.seed_hosts: "elasticsearch-master.es.svc.cluster.local"
+    discovery.seed_hosts: "elasticsearch-master.ns-elastic.svc.cluster.local"
     cluster.initial_master_nodes: "elasticsearch-data-0,elasticsearch-data-1,elasticsearch-data-2"
+    
     network.host: 0.0.0.0
     path.repo: ["/mnt/k8s-data"]
-    #node.max_local_storage_nodes: 3
+    node.max_local_storage_nodes: 3
     node:
       master: false
       data: true
       ingest: false
     xpack.security.enabled: true
     xpack.monitoring.collection.enabled: true
+---

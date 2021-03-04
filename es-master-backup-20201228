@@ -1,8 +1,8 @@
 kind: PersistentVolume
 apiVersion: v1
 metadata:
-  name: pv-volume-es-master
-  namespace: es
+  name: pv-volume-elastic-master
+  namespace: ns-elastic
   labels:
     type: local
 spec:
@@ -12,42 +12,13 @@ spec:
   accessModes:
     - ReadWriteOnce
   hostPath:
-    path: "/var/lib/docker/new/data/es/master"
+    path: "/var/lib/docker/data/es/master"
 ---
 kind: PersistentVolumeClaim
 apiVersion: v1
 metadata:
-  name: pv-claim-es-master
-  namespace: es
-spec:
-  storageClassName: manual
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 3Gi
----
-kind: PersistentVolume
-apiVersion: v1
-metadata:
-  name: pv-volume-es-master-bak
-  namespace: es
-  labels:
-    type: local
-spec:
-  storageClassName: manual
-  capacity:
-    storage: 200Gi
-  accessModes:
-    - ReadWriteOnce
-  hostPath:
-    path: "/mnt/k8s-data"
----
-kind: PersistentVolumeClaim
-apiVersion: v1
-metadata:
-  name: pv-claim-es-master-bak
-  namespace: es
+  name: pv-claim-elastic-master
+  namespace: ns-elastic
 spec:
   storageClassName: manual
   accessModes:
@@ -59,14 +30,14 @@ spec:
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  namespace: es
+  namespace: ns-elastic
   name: elasticsearch-master
   labels:
     app: elasticsearch
     role: master
 spec:
   serviceName: elasticsearch-master
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
       app: elasticsearch
@@ -90,18 +61,12 @@ spec:
                   - master
               topologyKey: kubernetes.io/hostname 
       volumes:
-       - name: pv-storage-es-master
+       - name: pv-storage-elastic-master
          persistentVolumeClaim:
-           claimName: pv-claim-es-master
-       - name: pv-storage-es-master-bak
-         persistentVolumeClaim:
-           claimName: pv-claim-es-master-bak
+           claimName: pv-claim-elastic-master
       containers:
         - name: elasticsearch
           image: registry.cn-zhangjiakou.aliyuncs.com/huazhu_platform/elasticsearch:7.4.2
-          args: [
-            "--path.repo=[\"/mnt/k8s-data\"]"
-          ]
           #image: docker.elastic.co/elasticsearch/elasticsearch:7.4.2
           resources:
             requests:
@@ -110,7 +75,7 @@ spec:
             limits:
               memory: 2Gi
               cpu: 2.0
-          command: ["bash", "-c", "ulimit -l unlimited && sysctl -w vm.max_map_count=262144 && chown -R elasticsearch:elasticsearch /usr/share/elasticsearch/data&& mkdir -p /mnt/k8s-data && exec su elasticsearch docker-entrypoint.sh"]
+          command: ["bash", "-c", "ulimit -l unlimited && sysctl -w vm.max_map_count=262144 && chown -R elasticsearch:elasticsearch /usr/share/elasticsearch/data && exec su elasticsearch docker-entrypoint.sh"]
           ports:
             - containerPort: 9200
               name: http
@@ -118,9 +83,9 @@ spec:
               name: transport
           env:
             - name: discovery.seed_hosts
-              value: "elasticsearch-master.es.svc.cluster.local,elasticsearch.es.svc.cluster.local"
+              value: "elasticsearch-master.ns-elastic.svc.cluster.local"
             - name: cluster.initial_master_nodes
-              value: "elasticsearch-master"
+              value: "elasticsearch-master-0,elasticsearch-master-1"
               #value: "elasticsearch-master-0"
             - name: ES_JAVA_OPTS
               value: -Xms512m -Xmx512m
@@ -131,14 +96,11 @@ spec:
               value: "false"
             - name: node.data
               value: "false"
-
+            
             - name: http.cors.enabled
               value: "true"
             - name: http.cors.allow-origin
               value: "*"
-
-            - name: path.repo
-              value: "/mnt/k8s-data"
 
             - name: cluster.name
               value: "elasticsearch-cluster-v7"
@@ -149,9 +111,8 @@ spec:
 
           volumeMounts:
            - mountPath: /usr/share/elasticsearch/data
-             name: pv-storage-es-master
-           - mountPath: /mnt/k8s-data
-             name: pv-storage-es-master-bak
+             name: pv-storage-elastic-master
+
           # Gave permission to init container
           securityContext:
             privileged: true
@@ -163,7 +124,7 @@ spec:
 apiVersion: policy/v1beta1
 kind: PodDisruptionBudget
 metadata:
-  namespace: es
+  namespace: ns-elastic
   name: elasticsearch-master
 spec:
   maxUnavailable: 1
@@ -175,7 +136,7 @@ spec:
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  namespace: es
+  namespace: ns-elastic
   name: elasticsearch-master-config
   labels:
     app: elasticsearch
@@ -184,5 +145,4 @@ data:
   elasticsearch.yml: |-
     network.host: 0.0.0.0
     path.repo: ["/mnt/k8s-data"]
-    xpack.monitoring.collection.enabled: true
-    xpack.security.enabled: true
+    
